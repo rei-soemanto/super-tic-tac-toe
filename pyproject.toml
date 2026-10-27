@@ -1,0 +1,28 @@
+[project]
+name = "super-tic-tac-toe"
+version = "0.1.0"
+description = "Super Tic-Tac-Toe against a search-based AI, as a pygame desktop app"
+requires-python = ">=3.12"
+dependencies = [
+    "pygame-ce>=2.5.8",
+]
+
+[project.scripts]
+super-tic-tac-toe = "super_tic_tac_toe.gui.app:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "super_tic_tac_toe"
+module-root = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
