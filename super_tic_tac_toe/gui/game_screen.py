@@ -6,18 +6,34 @@ import pygame
 from super_tic_tac_toe.engine.state import Placement
 from super_tic_tac_toe.game.clock import grids_won
 from super_tic_tac_toe.game.session import GameEnd, GameSession, Status
+from super_tic_tac_toe.gui import marks
 from super_tic_tac_toe.gui.board_view import BoardView
 from super_tic_tac_toe.gui.dialog import draw_game_over
-from super_tic_tac_toe.gui.fonts import Face, render
+from super_tic_tac_toe.gui.fonts import Face, measure, render
 from super_tic_tac_toe.gui.panel import Panel
 from super_tic_tac_toe.gui.widgets import Action, Ui
 
 MAX_WIDTH = 1152
-PANEL_WIDTH = 320
+PANEL_WIDTH = 420
+PANEL_GAP = 56
 WIDE_MIN = 1040
 TOP = 76
 SLOT_HEIGHT = 56
 BONUS_TEXT = "Bonus move! Place anywhere open."
+
+
+def board_hint(session: GameSession) -> str:
+    """The line above the board on a normal human turn: why the highlighted grids are open."""
+    if session.status != Status.HUMAN_TURN or session.in_bonus:
+        return ""
+    state = session.state
+    last = session.last_move
+    if last is None:
+        return "You move first, anywhere."
+    grid, cell = last
+    if state.active_grid is not None:
+        return f"AI played {grid + 1}.{cell + 1}, so you play in grid {state.active_grid + 1}."
+    return f"AI played {grid + 1}.{cell + 1}. Grid {cell + 1} is closed, so play in any open grid."
 
 
 @dataclass
@@ -68,18 +84,19 @@ class GameScreen:
         x0 = (width - cw) // 2
         top = TOP - self.scroll
 
-        ui.text("Super Tic-Tac-Toe", (x0, 24 - self.scroll), Face.DISPLAY, 24)
+        logo_right = ui.logo((x0, 26 - self.scroll), 24)
+        ui.text("Super Tic-Tac-Toe", (logo_right + 12, 24 - self.scroll), Face.DISPLAY, 22)
         ui.toggle("Dark theme", (x0 + cw, 26 - self.scroll), theme_dark, actions.toggle_theme)
 
         wide = width >= WIDE_MIN
-        board_top = top + SLOT_HEIGHT + 12
+        board_top = top + SLOT_HEIGHT + 8
         if wide:
-            column = cw - PANEL_WIDTH - 48
-            size = max(240, min(column, height - TOP - SLOT_HEIGHT - 12 - 24))
+            column = cw - PANEL_WIDTH - PANEL_GAP
+            size = max(240, min(column, height - TOP - SLOT_HEIGHT - 8 - 24))
             board_x = x0 + (column - size) // 2
-            panel_x, panel_y, panel_w = x0 + column + 48, top, PANEL_WIDTH
+            panel_x, panel_y, panel_w = x0 + column + PANEL_GAP, board_top, PANEL_WIDTH
         else:
-            size = max(240, min(cw, height - TOP - SLOT_HEIGHT - 12 - 24))
+            size = max(240, min(cw, height - TOP - SLOT_HEIGHT - 8 - 24))
             board_x = x0 + (cw - size) // 2
             panel_x, panel_y, panel_w = board_x, board_top + size + 32, size
 
@@ -116,12 +133,20 @@ class GameScreen:
 
     @staticmethod
     def _slot(ui: Ui, session: GameSession, x: int, y: int, width: int, retry: Action) -> None:
-        """The space above the board: an AI error, the bonus banner, or nothing."""
+        """The space above the board: an AI error, the bonus banner, or a hint about where to play."""
         p = ui.p
         if session.error:
             ui.banner(session.error, x, y, width, "Retry", retry)
         elif session.in_bonus:
             rect = pygame.Rect(x, y + 6, width, SLOT_HEIGHT - 12)
-            ui.fill(rect, p.ink)
-            text = render(BONUS_TEXT, Face.SEMIBOLD, 16, p.paper)
-            ui.surface.blit(text, text.get_rect(center=rect.center))
+            ui.rounded(rect, 10, p.x_ink)
+            text = render(BONUS_TEXT, Face.SEMIBOLD, 16, p.on_ink)
+            star = marks.icon("star", 18, p.on_ink)
+            left = rect.centerx - (text.get_width() + 28) // 2
+            ui.blit(star, (left, rect.centery - 9))
+            ui.blit(text, (left + 28, rect.centery - text.get_height() // 2))
+        else:
+            hint = board_hint(session)
+            if hint:
+                th = measure(hint, Face.REGULAR, 14)[1]
+                ui.text(hint, (x, y + SLOT_HEIGHT - th - 12), Face.REGULAR, 14, p.muted, wrap=width)

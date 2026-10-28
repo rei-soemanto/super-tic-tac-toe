@@ -13,14 +13,18 @@ from super_tic_tac_toe.game.clock import (
 from super_tic_tac_toe.game.session import HUMAN, GameSession, Status, Timeout
 from super_tic_tac_toe.game.settings import Settings
 from super_tic_tac_toe.gui import marks
+from super_tic_tac_toe.gui.board_view import owner
 from super_tic_tac_toe.gui.fonts import Face, measure, render
 from super_tic_tac_toe.gui.widgets import Action, Ui
 
 DIFFICULTY_LABELS = {"easy": "Easy", "medium": "Medium", "hard": "Hard"}
 FORCED_SCORE = 99_000
-RING_SIZE = 96
+RING_SIZE = 72
+PLAYER_CARD_H = 68
+CARD_GAP = 12
 HISTORY_ROWS = 8
 HISTORY_ROW_H = 22
+WIDE_PANEL = 380
 
 
 def mode_summary(settings: Settings) -> str:
@@ -50,6 +54,21 @@ def turn_text(session: GameSession) -> str:
                 return "Game over, draw"
             return "Game over, you won" if end.winner == HUMAN else "Game over, AI won"
     return ""
+
+
+def player_tags(session: GameSession) -> tuple[str, str]:
+    """Status lines under the You and AI cards."""
+    status = session.status
+    winner = session.end.winner if status == Status.GAME_OVER and session.end else None
+    you = "Winner" if winner == HUMAN else "Bonus move" if session.in_bonus else "To move" if status == Status.HUMAN_TURN else "Plays X"
+    ai = DIFFICULTY_LABELS[session.settings.difficulty]
+    if winner is not None and winner != HUMAN:
+        ai = "Winner"
+    elif status == Status.AI_THINKING:
+        ai = "Thinking…"
+    elif status == Status.ANIMATING_AI:
+        ai = "Moving"
+    return you, ai
 
 
 def score_text(score: int) -> str:
@@ -82,15 +101,61 @@ class Panel:
         on_settings: Action,
     ) -> int:
         """Draws the panel from (x, y); returns its height."""
-        p = ui.p
         top = y
-        y = ui.text(turn_text(session), (x, y), Face.HEADING, 24, wrap=width).bottom + 4
-        summary = f"{mode_summary(session.settings)}. {DIFFICULTY_LABELS[session.settings.difficulty]} AI."
-        y = ui.text(summary, (x, y), Face.REGULAR, 14, p.muted, wrap=width).bottom + 24
+        y = self._players(ui, x, y, width, session) + CARD_GAP
+        y = ui.card_section(x, y, width, lambda cy, w: self._turn(ui, x + 18, cy, w, session, on_new_game, on_undo, on_settings)) + CARD_GAP
+        y = ui.card_section(x, y, width, lambda cy, w: self._search(ui, x + 18, cy, w, session)) + CARD_GAP
+        y = ui.card_section(x, y, width, lambda cy, w: self._history(ui, x + 18, cy, w, session))
+        return y - top
 
-        y = self._clock(ui, x, y, width, session) + 24
+    def _players(self, ui: Ui, x: int, y: int, width: int, session: GameSession) -> int:
+        p = ui.p
+        status = session.status
+        won = grids_won(session.state)
+        tags = player_tags(session)
+        card_w = (width - CARD_GAP) // 2
+        for i, (player, name, active) in enumerate(
+            ((X, "You", status == Status.HUMAN_TURN), (O, "AI", status in (Status.AI_THINKING, Status.ANIMATING_AI)))
+        ):
+            rect = pygame.Rect(x + i * (card_w + CARD_GAP), y, card_w, PLAYER_CARD_H)
+            color = p.player(player)
+            if active:
+                ui.rounded(rect, 14, p.card, color, 2)
+            else:
+                ui.card(rect)
+            mark = marks.mark(player, 36, color, 0.13)
+            ui.blit(mark, (rect.x + 14, rect.centery - 18))
+            tx = rect.x + 14 + 36 + 12
+            ui.text(name, (tx, rect.y + 15), Face.BOLD, 15)
+            ui.text(tags[i], (tx, rect.y + 36), Face.REGULAR, 12, p.muted)
+            count = render(str(won[i]), Face.DISPLAY, 26, color)
+            label_w = measure("grids won", Face.REGULAR, 11)[0]
+            right = rect.right - 14
+            ui.blit(count, (right - count.get_width(), rect.y + 10))
+            ui.text("grids won", (right - label_w, rect.y + 44), Face.REGULAR, 11, p.muted)
+        return y + PLAYER_CARD_H
+
+    def _turn(
+        self,
+        ui: Ui,
+        x: int,
+        y: int,
+        width: int,
+        session: GameSession,
+        on_new_game: Action,
+        on_undo: Action,
+        on_settings: Action,
+    ) -> int:
+        p = ui.p
+        y = ui.text(turn_text(session), (x, y), Face.HEADING, 22, wrap=width).bottom + 4
+        summary = f"{mode_summary(session.settings)}. {DIFFICULTY_LABELS[session.settings.difficulty]} AI."
+        y = ui.text(summary, (x, y), Face.REGULAR, 14, p.muted, wrap=width).bottom + 16
+        clock_bottom = self._clock(ui, x, y, width, session)
+        if clock_bottom is not None:
+            y = clock_bottom + 16
 
         bx = x
+        rect = None
         for label, action, primary, shown, enabled in (
             ("New game", on_new_game, True, True, True),
             ("Undo", on_undo, False, session.settings.mode == "free", session.can_undo()),
@@ -99,32 +164,10 @@ class Panel:
             if shown:
                 rect = ui.button(label, (bx, y), action, primary=primary, enabled=enabled)
                 bx = rect.right + 8
-        y = rect.bottom + 24
+        return rect.bottom
 
-        ui.rule(x, y, width)
-        y = ui.text("Last AI search", (x, y + 16), Face.SEMIBOLD, 16).bottom + 8
-        stats = session.stats
-        if stats is None:
-            y = ui.text("Shown after the AI moves.", (x, y), Face.REGULAR, 14, p.muted).bottom
-        else:
-            depth = f"{stats.depth_reached} placement{'' if stats.depth_reached == 1 else 's'}"
-            for label, value in (
-                ("Depth reached", depth),
-                ("Positions searched", f"{stats.nodes:,}"),
-                ("Time", f"{round(stats.time_ms)} ms"),
-                ("Evaluation", score_text(stats.score)),
-            ):
-                ui.text(label, (x, y), Face.REGULAR, 14, p.muted)
-                value_w = measure(value, Face.REGULAR, 14)[0]
-                y = ui.text(value, (x + width - value_w, y), Face.REGULAR, 14).bottom + 4
-        y += 20
-
-        ui.rule(x, y, width)
-        y = ui.text("Moves", (x, y + 16), Face.SEMIBOLD, 16).bottom + 8
-        y = self._history(ui, x, y, width, session)
-        return y - top
-
-    def _clock(self, ui: Ui, x: int, y: int, width: int, session: GameSession) -> int:
+    def _clock(self, ui: Ui, x: int, y: int, width: int, session: GameSession) -> int | None:
+        """Draws the mode's clock; returns its bottom, or None when there is nothing to show."""
         p = ui.p
         settings = session.settings
         now = session.clock_now
@@ -132,51 +175,75 @@ class Panel:
         if settings.mode == "competitive":
             limit = session.placement_limit
             status = session.status
-            owner = "You"
+            player = X
             if status == Status.AI_THINKING:
-                left, owner = remaining(limit, session.ai_requested_at, now), "AI"
+                left, player = remaining(limit, session.ai_requested_at, now), O
             elif status == Status.HUMAN_TURN:
                 left = remaining(limit, session.placement_started_at, now)
             elif status == Status.GAME_OVER:
                 timed_out = session.end.timed_out if session.end else None
                 if timed_out not in (Timeout.HUMAN, Timeout.AI):
-                    return y - 24
-                left, owner = 0.0, "AI" if timed_out == Timeout.AI else "You"
+                    return None
+                left, player = 0.0, O if timed_out == Timeout.AI else X
             else:
                 left = limit
-            color = p.danger if left <= COMPETITIVE_WARNING_S else p.ink
-            ui.surface.blit(marks.ring(RING_SIZE, p.rule, color, left / limit), (x, y))
+            low = left <= COMPETITIVE_WARNING_S
+            color = p.danger if low else p.player(player)
+            ui.blit(marks.ring(RING_SIZE, p.line, color, left / limit), (x, y))
             whole = math.ceil(left)
-            digits = render(str(whole), Face.DISPLAY, 30, color)
-            ui.surface.blit(digits, digits.get_rect(center=(x + RING_SIZE // 2, y + RING_SIZE // 2)))
+            digits = render(str(whole), Face.DISPLAY, 26, p.danger if low else p.ink)
+            ui.blit(digits, digits.get_rect(center=(x + RING_SIZE // 2, y + RING_SIZE // 2)).topleft)
             seconds = "second" if whole == 1 else "seconds"
             ty = y + RING_SIZE // 2 - 20
-            ui.text(owner, (x + RING_SIZE + 16, ty), Face.SEMIBOLD, 14)
+            ui.text("You" if player == X else "AI", (x + RING_SIZE + 16, ty), Face.SEMIBOLD, 14, color)
             ui.text(f"{seconds} left for this placement", (x + RING_SIZE + 16, ty + 20), Face.REGULAR, 14, p.muted)
             return y + RING_SIZE
 
         if settings.mode == "time_based":
             left = remaining(session.game_limit, session.game_started_at, now)
+            low = left < TIME_BASED_WARNING_S
             ui.text("Game time left", (x, y), Face.REGULAR, 14, p.muted)
-            color = p.danger if left < TIME_BASED_WARNING_S else p.ink
-            bottom = ui.text(format_clock(left), (x, y + 20), Face.DISPLAY, 48, color).bottom
-            won_x, won_o = grids_won(session.state)
-            for i, (label, count) in enumerate((("You", won_x), ("AI", won_o))):
-                column = x + width - 48 * (2 - i)
-                ui.text(label, (column, y + 14), Face.REGULAR, 14, p.muted)
-                ui.text(str(count), (column, y + 34), Face.BOLD, 24)
+            bottom = ui.text(format_clock(left), (x, y + 20), Face.DISPLAY, 44, p.danger if low else p.ink).bottom
+            if low:
+                warning = f"Under {TIME_BASED_WARNING_S} s"
+                ww, wh = measure(warning, Face.SEMIBOLD, 13)
+                ui.text(warning, (x + width - ww, bottom - wh - 6), Face.SEMIBOLD, 13, p.danger)
             return bottom
 
         ui.text("Elapsed", (x, y), Face.REGULAR, 14, p.muted)
-        return ui.text(format_clock(now - session.game_started_at), (x, y + 20), Face.DISPLAY, 48).bottom
+        return ui.text(format_clock(now - session.game_started_at), (x, y + 20), Face.DISPLAY, 44).bottom
+
+    def _search(self, ui: Ui, x: int, y: int, width: int, session: GameSession) -> int:
+        p = ui.p
+        y = ui.heading("Last AI search", (x, y)).bottom + 10
+        stats = session.stats
+        if stats is None:
+            return ui.text("Shown after the AI moves.", (x, y), Face.REGULAR, 14, p.muted, wrap=width).bottom
+        items = (
+            ("Depth", str(stats.depth_reached)),
+            ("Positions", f"{stats.nodes:,}"),
+            ("Time", f"{round(stats.time_ms)} ms"),
+            ("Evaluation", score_text(stats.score)),
+        )
+        columns = 4 if width >= WIDE_PANEL - 36 else 2
+        col_w = (width - 10 * (columns - 1)) // columns
+        bottom = y
+        for i, (label, value) in enumerate(items):
+            cx = x + (i % columns) * (col_w + 10)
+            cy = y + (i // columns) * 52
+            ui.text(label, (cx, cy), Face.REGULAR, 12, p.muted)
+            bottom = max(bottom, ui.text(value, (cx, cy + 18), Face.BOLD, 16, wrap=col_w).bottom)
+        return bottom
 
     def _history(self, ui: Ui, x: int, y: int, width: int, session: GameSession) -> int:
         p = ui.p
+        y = ui.heading("Moves", (x, y)).bottom + 10
         placements = session.state.placements()
         if not placements:
             return ui.text("You play X and move first, anywhere.", (x, y), Face.REGULAR, 14, p.muted, wrap=width).bottom
 
-        rows = (len(placements) + 2) // 3
+        columns = 4 if width >= WIDE_PANEL - 36 else 3
+        rows = (len(placements) + columns - 1) // columns
         max_scroll = max(0, rows - HISTORY_ROWS)
         if self._follow or self.history_scroll > max_scroll:
             self.history_scroll = max_scroll
@@ -186,24 +253,24 @@ class Panel:
         self.history_rect = pygame.Rect(x, y, width, visible * HISTORY_ROW_H)
 
         state = session.state
-        column_w = width // 3
+        column_w = width // columns
         for row in range(self.history_scroll, self.history_scroll + visible):
-            for column in range(3):
-                i = row * 3 + column
+            for column in range(columns):
+                i = row * columns + column
                 if i >= len(placements):
                     break
                 grid, cell = placements[i]
-                player = "X" if state.bits[X][grid] >> cell & 1 else "O" if state.bits[O][grid] >> cell & 1 else ""
+                player = owner(state, grid, cell)
                 cx = x + column * column_w
                 cy = y + (row - self.history_scroll) * HISTORY_ROW_H
                 number = str(i + 1)
                 nw = measure(number, Face.REGULAR, 14)[0]
                 ui.text(number, (cx + 22 - nw, cy), Face.REGULAR, 14, p.muted)
-                ui.text(player, (cx + 30, cy), Face.BOLD, 14)
+                if player is not None:
+                    ui.text("X" if player == X else "O", (cx + 30, cy), Face.BOLD, 14, p.player(player))
                 ui.text(f"{grid + 1}.{cell + 1}", (cx + 46, cy), Face.REGULAR, 14)
         y += visible * HISTORY_ROW_H + 8
         if max_scroll:
             ui.text("Scroll to see earlier moves.", (x, y), Face.REGULAR, 12, p.muted)
             y += 18
         return ui.text("Grid.cell, each numbered 1 to 9 from the top left.", (x, y), Face.REGULAR, 12, p.muted, wrap=width).bottom
-

@@ -189,8 +189,8 @@ class App:
     @staticmethod
     def _icon() -> pygame.Surface:
         icon = pygame.Surface((64, 64), pygame.SRCALPHA)
-        icon.fill(LIGHT.paper)
-        icon.blit(marks.mark(X, 64, LIGHT.ink, 0.12), (0, 0))
+        icon.blit(marks.rounded((64, 64), 14, LIGHT.card), (0, 0))
+        icon.blit(marks.mark(X, 64, LIGHT.x_ink, 0.12), (0, 0))
         return icon
 
 

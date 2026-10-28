@@ -109,3 +109,61 @@ def _ring(size: int, track: Color, color: Color, fraction: float) -> pygame.Surf
 def ring(size: int, track: Color, color: Color, fraction: float) -> pygame.Surface:
     """Countdown ring starting at 12 o'clock; `fraction` of the circle remains."""
     return _ring(size, track, color, round(max(0.0, min(1.0, fraction)) * 240) / 240)
+
+
+@lru_cache(maxsize=512)
+def _rounded(
+    width: int, height: int, radius: int, fill: Color | None, edge: Color | None, edge_width: int
+) -> pygame.Surface:
+    scale = SUPERSAMPLE if width * height <= 200_000 else 2
+    canvas = pygame.Surface((width * scale, height * scale), pygame.SRCALPHA)
+    outer = canvas.get_rect()
+    if edge is not None and edge_width > 0:
+        pygame.draw.rect(canvas, edge, outer, 0 if fill is not None else edge_width * scale, border_radius=radius * scale)
+    if fill is not None:
+        inset = edge_width * scale if edge is not None else 0
+        inner = outer.inflate(-2 * inset, -2 * inset)
+        pygame.draw.rect(canvas, fill, inner, border_radius=max(0, radius * scale - inset))
+    return pygame.transform.smoothscale(canvas, (width, height))
+
+
+def rounded(
+    size: tuple[int, int], radius: int, fill: Color | None, edge: Color | None = None, edge_width: int = 1
+) -> pygame.Surface:
+    """A rounded rectangle, filled and/or edged, with smooth corners."""
+    width, height = max(1, size[0]), max(1, size[1])
+    radius = max(0, min(radius, width // 2, height // 2))
+    return _rounded(width, height, radius, fill, edge, edge_width)
+
+
+# Stroke icons on a 24-unit grid: ("line", points...) polylines and ("ring", cx, cy, r) circles.
+ICONS: dict[str, tuple[tuple, ...]] = {
+    "stopwatch": (("ring", 12, 13.5, 7.5), ("line", (12, 13.5), (12, 9.5)), ("line", (9.5, 2.5), (14.5, 2.5)), ("line", (12, 2.5), (12, 6))),
+    "hourglass": (
+        ("line", (6, 3), (18, 3)),
+        ("line", (6, 21), (18, 21)),
+        ("line", (7.5, 3), (12, 12), (16.5, 3)),
+        ("line", (7.5, 21), (12, 12), (16.5, 21)),
+    ),
+    "infinity": (("ring", 7.5, 12, 4), ("ring", 16.5, 12, 4)),
+    "arrow": (("line", (4, 12), (19, 12)), ("line", (13, 6), (19, 12), (13, 18))),
+    "star": (("line", (12, 3), (14.6, 8.6), (20.6, 9.3), (16.1, 13.4), (17.3, 19.4), (12, 16.4), (6.7, 19.4), (7.9, 13.4), (3.4, 9.3), (9.4, 8.6), (12, 3)),),
+}
+
+
+@lru_cache(maxsize=256)
+def icon(name: str, size: int, color: Color, width: float = 2.0) -> pygame.Surface:
+    """A named stroke icon `size` pixels square; `width` is in 24-unit grid units."""
+    big = size * SUPERSAMPLE
+    unit = big / 24
+    canvas = pygame.Surface((big, big), pygame.SRCALPHA)
+    w = width * unit
+    for shape in ICONS[name]:
+        if shape[0] == "ring":
+            _, cx, cy, r = shape
+            _arc(canvas, color, (cx * unit, cy * unit), r * unit, w, 1.0, caps=False)
+        else:
+            points = [(x * unit, y * unit) for x, y in shape[1:]]
+            for a, b in zip(points, points[1:]):
+                _segment(canvas, color, a, b, w)
+    return pygame.transform.smoothscale(canvas, (size, size))
