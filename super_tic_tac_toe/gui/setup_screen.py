@@ -139,6 +139,11 @@ class SetupScreen:
             main_w = cw - SIDE_WIDTH - GAP
             main_bottom = ui.card_section(x, y, main_w, lambda cy, w: self._settings(ui, x + 28, cy, w, now), (28, 28))
             side_bottom = self._side(ui, x + main_w + GAP, y, SIDE_WIDTH, on_start)
+            # main_x = x + SIDE_WIDTH + GAP  # settings column now starts after the side column
+            # side_bottom = self._side(ui, x, y, SIDE_WIDTH, on_start)  # players + credits on the left
+            # main_bottom = ui.card_section(
+            #     main_x, y, main_w, lambda cy, w: self._settings(ui, main_x + 28, cy, w, now), (28, 28)
+            # )
             y = max(main_bottom, side_bottom) + 32
         else:
             y = ui.card_section(x, y, cw, lambda cy, w: self._settings(ui, x + 24, cy, w, now), (24, 24)) + CARD_GAP

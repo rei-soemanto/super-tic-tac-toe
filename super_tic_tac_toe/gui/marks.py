@@ -70,6 +70,25 @@ def _arc(  # thick circular arc, clockwise from 12 o'clock
             pygame.draw.circle(surface, color, (cx + radius * math.cos(t), cy + radius * math.sin(t)), width / 2)
 
 
+def _polygon(
+    surface: pygame.Surface,
+    color: Color,
+    points: list[tuple[float, float]],
+    width: float,
+    fraction: float,
+) -> None:
+    """Draws the closed outline `points`, up to `fraction` of its perimeter (for the draw-in animation)."""
+    edges = list(zip(points, points[1:] + points[:1]))
+    lengths = [math.dist(a, b) for a, b in edges]
+    budget = sum(lengths) * fraction  # how much of the outline to draw this frame
+    for (a, b), length in zip(edges, lengths):
+        if budget <= 0:
+            break
+        t = min(1.0, budget / length)  # part of this edge that is visible
+        end = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+        _segment(surface, color, a, end, width)  # round caps make the corners join cleanly
+        budget -= length
+
 def _quantize(value: float) -> float:  # snap progress to steps so the cache hits
     return round(value * PROGRESS_STEPS) / PROGRESS_STEPS
 
@@ -87,6 +106,8 @@ def _mark(player: int, size: int, color: Color, width: float, first: float, seco
             _segment(canvas, color, (hi, lo), (hi - (hi - lo) * second, lo + (hi - lo) * second), w)
     else:
         _arc(canvas, color, (big / 2, big / 2), 0.28 * big, w, first, caps=True)  # O is a circle of radius 28%
+        # top, left, right = (0.50 * big, 0.22 * big), (0.21 * big, 0.74 * big), (0.79 * big, 0.74 * big)
+        # _polygon(canvas, color, [top, right, left], w, first)
     return pygame.transform.smoothscale(canvas, (size, size))
 
 

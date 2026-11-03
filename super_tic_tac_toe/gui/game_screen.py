@@ -95,6 +95,9 @@ class GameScreen:
             size = max(240, min(column, height - TOP - SLOT_HEIGHT - 8 - 24))
             board_x = x0 + (column - size) // 2
             panel_x, panel_y, panel_w = x0 + column + PANEL_GAP, board_top, PANEL_WIDTH
+            # column_x = x0 + PANEL_WIDTH + PANEL_GAP  # board column now starts after the panel
+            # board_x = column_x + (column - size) // 2  # board centered in its column
+            # panel_x, panel_y, panel_w = x0, board_top, PANEL_WIDTH
         else:
             size = max(240, min(cw, height - TOP - SLOT_HEIGHT - 8 - 24))
             board_x = x0 + (cw - size) // 2
