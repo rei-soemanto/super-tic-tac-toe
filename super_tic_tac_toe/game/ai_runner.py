@@ -15,6 +15,7 @@ from super_tic_tac_toe.engine.state import Placement, replay
 from super_tic_tac_toe.game.settings import Difficulty
 
 
+# The job sent to the AI worker.
 @dataclass(frozen=True)
 class AiRequest:
     request_id: int
@@ -24,6 +25,7 @@ class AiRequest:
     game_time_left_ms: int | None
 
 
+# The AI's answer: its placement(s) plus the search stats shown in the side panel.
 @dataclass(frozen=True)
 class AiTurn:
     moves: tuple[Placement, ...]
@@ -33,6 +35,7 @@ class AiTurn:
     score: int
 
 
+# An answer as delivered back: either a turn or an error message.
 @dataclass(frozen=True)
 class AiOutcome:
     request_id: int
@@ -41,6 +44,7 @@ class AiOutcome:
 
 
 def compute_turn(request: AiRequest) -> AiTurn:
+    """Runs inside the worker: rebuild the board from the history, then let the AI play its turn."""
     turn = play_turn(
         replay(list(request.history)),
         request.difficulty,
@@ -77,11 +81,14 @@ class SyncAiRunner:
 
 
 class ProcessAiRunner:
+    """The real game's runner: one background worker process for the AI search."""
+
     def __init__(self) -> None:
         self._pool = ProcessPoolExecutor(max_workers=1)
         self._futures: list[tuple[int, Future[AiTurn]]] = []
 
     def warm_up(self) -> None:
+        """Starts the worker at launch so the first AI move is not delayed."""
         self._pool.submit(int)
 
     def submit(self, request: AiRequest) -> None:
@@ -93,6 +100,7 @@ class ProcessAiRunner:
         self._futures.append((request.request_id, future))
 
     def poll(self) -> list[AiOutcome]:
+        """Finished answers, collected without waiting for unfinished ones."""
         outcomes = []
         pending = []
         for request_id, future in self._futures:
@@ -101,7 +109,7 @@ class ProcessAiRunner:
                 continue
             try:
                 outcomes.append(AiOutcome(request_id, future.result()))
-            except BrokenProcessPool:
+            except BrokenProcessPool: # the worker crashed: replace it and report the error
                 self._restart()
                 outcomes.append(AiOutcome(request_id, None, "The AI stopped unexpectedly."))
             except Exception as error:

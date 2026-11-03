@@ -11,30 +11,30 @@ import pygame
 
 from super_tic_tac_toe.engine.rules import X
 
-SUPERSAMPLE = 4
-STROKE_S = 0.22
-SECOND_STROKE_DELAY_S = 0.11
-PROGRESS_STEPS = 24
+SUPERSAMPLE = 4  # draw at 4x then downscale for smooth edges
+STROKE_S = 0.22  # seconds to draw one stroke
+SECOND_STROKE_DELAY_S = 0.11  # X's second stroke starts after this delay
+PROGRESS_STEPS = 24  # animation frames cached per mark
 
 Color = tuple[int, int, int]
 
 
 def _ease_out(t: float) -> float:
-    return 1 - (1 - t) ** 2
+    return 1 - (1 - t) ** 2  # quadratic ease-out
 
 
 def stroke_progress(player: int, elapsed: float | None) -> tuple[float, float]:
     """Draw-in progress of the mark's (first, second) stroke `elapsed` seconds after placement."""
-    if elapsed is None:
+    if elapsed is None:  # no animation: fully drawn
         return 1.0, 1.0
     first = _ease_out(min(1.0, max(0.0, elapsed / STROKE_S)))
-    if player != X:
+    if player != X:  # O has a single stroke
         return first, 1.0
     second = _ease_out(min(1.0, max(0.0, (elapsed - SECOND_STROKE_DELAY_S) / STROKE_S)))
     return first, second
 
 
-def _segment(surface: pygame.Surface, color: Color, a: tuple[float, float], b: tuple[float, float], width: float) -> None:
+def _segment(surface: pygame.Surface, color: Color, a: tuple[float, float], b: tuple[float, float], width: float) -> None:  # thick line with round caps
     ax, ay = a
     bx, by = b
     length = math.hypot(bx - ax, by - ay)
@@ -47,7 +47,7 @@ def _segment(surface: pygame.Surface, color: Color, a: tuple[float, float], b: t
     pygame.draw.circle(surface, color, b, width / 2)
 
 
-def _arc(
+def _arc(  # thick circular arc, clockwise from 12 o'clock
     surface: pygame.Surface,
     color: Color,
     center: tuple[float, float],
@@ -70,23 +70,23 @@ def _arc(
             pygame.draw.circle(surface, color, (cx + radius * math.cos(t), cy + radius * math.sin(t)), width / 2)
 
 
-def _quantize(value: float) -> float:
+def _quantize(value: float) -> float:  # snap progress to steps so the cache hits
     return round(value * PROGRESS_STEPS) / PROGRESS_STEPS
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=1024)  # cache finished mark surfaces
 def _mark(player: int, size: int, color: Color, width: float, first: float, second: float) -> pygame.Surface:
     big = size * SUPERSAMPLE
     canvas = pygame.Surface((big, big), pygame.SRCALPHA)
     w = width * big
     if player == X:
-        lo, hi = 0.24 * big, 0.76 * big
+        lo, hi = 0.24 * big, 0.76 * big  # X spans 24%-76% of the cell
         if first > 0:
             _segment(canvas, color, (lo, lo), (lo + (hi - lo) * first, lo + (hi - lo) * first), w)
         if second > 0:
             _segment(canvas, color, (hi, lo), (hi - (hi - lo) * second, lo + (hi - lo) * second), w)
     else:
-        _arc(canvas, color, (big / 2, big / 2), 0.28 * big, w, first, caps=True)
+        _arc(canvas, color, (big / 2, big / 2), 0.28 * big, w, first, caps=True)  # O is a circle of radius 28%
     return pygame.transform.smoothscale(canvas, (size, size))
 
 
@@ -106,7 +106,7 @@ def _ring(size: int, track: Color, color: Color, fraction: float) -> pygame.Surf
     return pygame.transform.smoothscale(canvas, (size, size))
 
 
-def ring(size: int, track: Color, color: Color, fraction: float) -> pygame.Surface:
+def ring(size: int, track: Color, color: Color, fraction: float) -> pygame.Surface:  # clock countdown ring
     """Countdown ring starting at 12 o'clock; `fraction` of the circle remains."""
     return _ring(size, track, color, round(max(0.0, min(1.0, fraction)) * 240) / 240)
 
@@ -115,7 +115,7 @@ def ring(size: int, track: Color, color: Color, fraction: float) -> pygame.Surfa
 def _rounded(
     width: int, height: int, radius: int, fill: Color | None, edge: Color | None, edge_width: int
 ) -> pygame.Surface:
-    scale = SUPERSAMPLE if width * height <= 200_000 else 2
+    scale = SUPERSAMPLE if width * height <= 200_000 else 2  # less supersampling for big surfaces (memory)
     canvas = pygame.Surface((width * scale, height * scale), pygame.SRCALPHA)
     outer = canvas.get_rect()
     if edge is not None and edge_width > 0:
@@ -127,7 +127,7 @@ def _rounded(
     return pygame.transform.smoothscale(canvas, (width, height))
 
 
-def rounded(
+def rounded(  # smooth rounded rect (fill and/or edge)
     size: tuple[int, int], radius: int, fill: Color | None, edge: Color | None = None, edge_width: int = 1
 ) -> pygame.Surface:
     """A rounded rectangle, filled and/or edged, with smooth corners."""
@@ -137,7 +137,7 @@ def rounded(
 
 
 # Stroke icons on a 24-unit grid: ("line", points...) polylines and ("ring", cx, cy, r) circles.
-ICONS: dict[str, tuple[tuple, ...]] = {
+ICONS: dict[str, tuple[tuple, ...]] = {  # icons as line/ring data on a 24-unit grid
     "stopwatch": (("ring", 12, 13.5, 7.5), ("line", (12, 13.5), (12, 9.5)), ("line", (9.5, 2.5), (14.5, 2.5)), ("line", (12, 2.5), (12, 6))),
     "hourglass": (
         ("line", (6, 3), (18, 3)),
@@ -152,7 +152,7 @@ ICONS: dict[str, tuple[tuple, ...]] = {
 
 
 @lru_cache(maxsize=256)
-def icon(name: str, size: int, color: Color, width: float = 2.0) -> pygame.Surface:
+def icon(name: str, size: int, color: Color, width: float = 2.0) -> pygame.Surface:  # rasterize an ICONS entry
     """A named stroke icon `size` pixels square; `width` is in 24-unit grid units."""
     big = size * SUPERSAMPLE
     unit = big / 24

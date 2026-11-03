@@ -1,6 +1,6 @@
 from super_tic_tac_toe.engine.state import Placement
 
-EXACT, LOWER, UPPER = 0, 1, 2
+EXACT, LOWER, UPPER = 0, 1, 2 # true score, at least this, at most this
 
 MATE = 100_000
 MATE_BOUND = MATE - 1000
@@ -36,6 +36,7 @@ class TranspositionTable:
         return len(self._entries)
 
     def probe(self, key: int, ply: int) -> tuple[int, int, int, Placement | None] | None:
+        """The stored (depth, score, flag, best move) for this key, or None if never searched."""
         entry = self._entries.get(key)
         if entry is None:
             return None
@@ -43,6 +44,7 @@ class TranspositionTable:
         return depth, _from_table(score, ply), flag, move
 
     def store(self, key: int, depth: int, score: int, flag: int, move: Placement | None, ply: int) -> None:
+        """Remembers a searched position; the table is cleared when full."""
         if len(self._entries) >= self.max_entries:
             self._entries.clear()
         self._entries[key] = (depth, _to_table(score, ply), flag, move)

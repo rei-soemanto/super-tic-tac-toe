@@ -18,24 +18,24 @@ from super_tic_tac_toe.gui.fonts import Face, measure, render
 from super_tic_tac_toe.gui.widgets import Action, Ui
 
 DIFFICULTY_LABELS = {"easy": "Easy", "medium": "Medium", "hard": "Hard"}
-FORCED_SCORE = 99_000
+FORCED_SCORE = 99_000  # scores beyond this mean a forced win was found
 RING_SIZE = 72
 PLAYER_CARD_H = 68
 CARD_GAP = 12
-HISTORY_ROWS = 8
+HISTORY_ROWS = 8  # visible rows in the move list
 HISTORY_ROW_H = 22
 WIDE_PANEL = 380
 
 
-def mode_summary(settings: Settings) -> str:
-    if settings.mode == "competitive":
+def mode_summary(settings: Settings) -> str:  # one-line description of the clock mode
+    if settings.mode == "competitive":  # per-placement countdown ring
         return f"Competitive, {settings.competitive_seconds} s per placement"
-    if settings.mode == "time_based":
+    if settings.mode == "time_based":  # whole-game countdown
         return f"Time-based, {settings.time_based_minutes} min game"
     return "Free"
 
 
-def turn_text(session: GameSession) -> str:
+def turn_text(session: GameSession) -> str:  # headline for the current status
     state = session.state
     match session.status:
         case Status.HUMAN_TURN:
@@ -56,7 +56,7 @@ def turn_text(session: GameSession) -> str:
     return ""
 
 
-def player_tags(session: GameSession) -> tuple[str, str]:
+def player_tags(session: GameSession) -> tuple[str, str]:  # small status line under each player
     """Status lines under the You and AI cards."""
     status = session.status
     winner = session.end.winner if status == Status.GAME_OVER and session.end else None
@@ -71,7 +71,7 @@ def player_tags(session: GameSession) -> tuple[str, str]:
     return you, ai
 
 
-def score_text(score: int) -> str:
+def score_text(score: int) -> str:  # AI evaluation text
     if score > FORCED_SCORE:
         return "Forced win for AI"
     if score < -FORCED_SCORE:
@@ -83,9 +83,9 @@ class Panel:
     def __init__(self) -> None:
         self.history_scroll = 0
         self.history_rect = pygame.Rect(0, 0, 0, 0)
-        self._follow = True
+        self._follow = True  # auto-scroll the move list to the newest move
 
-    def scroll_history(self, rows: int) -> None:
+    def scroll_history(self, rows: int) -> None:  # manual scroll stops auto-follow
         self.history_scroll = max(0, self.history_scroll + rows)
         self._follow = False
 
@@ -102,16 +102,16 @@ class Panel:
     ) -> int:
         """Draws the panel from (x, y); returns its height."""
         top = y
-        y = self._players(ui, x, y, width, session) + CARD_GAP
-        y = ui.card_section(x, y, width, lambda cy, w: self._turn(ui, x + 18, cy, w, session, on_new_game, on_undo, on_settings)) + CARD_GAP
-        y = ui.card_section(x, y, width, lambda cy, w: self._search(ui, x + 18, cy, w, session)) + CARD_GAP
-        y = ui.card_section(x, y, width, lambda cy, w: self._history(ui, x + 18, cy, w, session))
+        y = self._players(ui, x, y, width, session) + CARD_GAP  # player cards
+        y = ui.card_section(x, y, width, lambda cy, w: self._turn(ui, x + 18, cy, w, session, on_new_game, on_undo, on_settings)) + CARD_GAP  # turn + clock + buttons card
+        y = ui.card_section(x, y, width, lambda cy, w: self._search(ui, x + 18, cy, w, session)) + CARD_GAP  # AI stats card
+        y = ui.card_section(x, y, width, lambda cy, w: self._history(ui, x + 18, cy, w, session))  # move list card
         return y - top
 
     def _players(self, ui: Ui, x: int, y: int, width: int, session: GameSession) -> int:
         p = ui.p
         status = session.status
-        won = grids_won(session.state)
+        won = grids_won(session.state)  # grids won per player
         tags = player_tags(session)
         card_w = (width - CARD_GAP) // 2
         for i, (player, name, active) in enumerate(
@@ -166,7 +166,7 @@ class Panel:
                 bx = rect.right + 8
         return rect.bottom
 
-    def _clock(self, ui: Ui, x: int, y: int, width: int, session: GameSession) -> int | None:
+    def _clock(self, ui: Ui, x: int, y: int, width: int, session: GameSession) -> int | None:  # mode-specific clock
         """Draws the mode's clock; returns its bottom, or None when there is nothing to show."""
         p = ui.p
         settings = session.settings
@@ -187,7 +187,7 @@ class Panel:
                 left, player = 0.0, O if timed_out == Timeout.AI else X
             else:
                 left = limit
-            low = left <= COMPETITIVE_WARNING_S
+            low = left <= COMPETITIVE_WARNING_S  # turn red when time is low
             color = p.danger if low else p.player(player)
             ui.blit(marks.ring(RING_SIZE, p.line, color, left / limit), (x, y))
             whole = math.ceil(left)
@@ -210,7 +210,7 @@ class Panel:
                 ui.text(warning, (x + width - ww, bottom - wh - 6), Face.SEMIBOLD, 13, p.danger)
             return bottom
 
-        ui.text("Elapsed", (x, y), Face.REGULAR, 14, p.muted)
+        ui.text("Elapsed", (x, y), Face.REGULAR, 14, p.muted)  # free mode: count up
         return ui.text(format_clock(now - session.game_started_at), (x, y + 20), Face.DISPLAY, 44).bottom
 
     def _search(self, ui: Ui, x: int, y: int, width: int, session: GameSession) -> int:
@@ -225,7 +225,7 @@ class Panel:
             ("Time", f"{round(stats.time_ms)} ms"),
             ("Evaluation", score_text(stats.score)),
         )
-        columns = 4 if width >= WIDE_PANEL - 36 else 2
+        columns = 4 if width >= WIDE_PANEL - 36 else 2  # stats grid adapts to width
         col_w = (width - 10 * (columns - 1)) // columns
         bottom = y
         for i, (label, value) in enumerate(items):
@@ -245,7 +245,7 @@ class Panel:
         columns = 4 if width >= WIDE_PANEL - 36 else 3
         rows = (len(placements) + columns - 1) // columns
         max_scroll = max(0, rows - HISTORY_ROWS)
-        if self._follow or self.history_scroll > max_scroll:
+        if self._follow or self.history_scroll > max_scroll:  # stick to bottom while following
             self.history_scroll = max_scroll
         if self.history_scroll >= max_scroll:
             self._follow = True
@@ -268,7 +268,7 @@ class Panel:
                 ui.text(number, (cx + 22 - nw, cy), Face.REGULAR, 14, p.muted)
                 if player is not None:
                     ui.text("X" if player == X else "O", (cx + 30, cy), Face.BOLD, 14, p.player(player))
-                ui.text(f"{grid + 1}.{cell + 1}", (cx + 46, cy), Face.REGULAR, 14)
+                ui.text(f"{grid + 1}.{cell + 1}", (cx + 46, cy), Face.REGULAR, 14)  # move shown as grid.cell, 1-based
         y += visible * HISTORY_ROW_H + 8
         if max_scroll:
             ui.text("Scroll to see earlier moves.", (x, y), Face.REGULAR, 12, p.muted)

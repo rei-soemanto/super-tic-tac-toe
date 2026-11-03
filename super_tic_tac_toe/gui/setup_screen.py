@@ -14,24 +14,24 @@ from super_tic_tac_toe.gui import marks
 from super_tic_tac_toe.gui.fonts import Face, measure, render
 from super_tic_tac_toe.gui.widgets import Action, Ui, option_height
 
-MODES = (
+MODES = (  # (value, title, description, icon)
     ("competitive", "Competitive", "Each placement has its own clock. Run out and you lose.", "stopwatch"),
     ("time_based", "Time-based", "One clock for the whole game. When it runs out, most small grids won wins.", "hourglass"),
     ("free", "Free", "No clock. Undo your turn whenever you like.", "infinity"),
 )
 
-DIFFICULTIES = (
+DIFFICULTIES = (  # (value, title, description, meter segments)
     ("easy", "Easy", "Looks 2 placements ahead", 2),
     ("medium", "Medium", "Looks 4 placements ahead", 4),
     ("hard", "Hard", "Searches as deep as it can in 2 seconds", 6),
 )
 
-TIME_OPTIONS = {
+TIME_OPTIONS = {  # per-mode: label, unit, presets, allowed range, settings field
     "competitive": ("Time per placement", "s", COMPETITIVE_PRESETS, COMPETITIVE_RANGE, "competitive_seconds"),
     "time_based": ("Game length", "min", TIME_BASED_PRESETS, TIME_BASED_RANGE, "time_based_minutes"),
 }
 
-RULES = (
+RULES = (  # How-to-play tiles
     "You are X and move first, anywhere. The AI is O.",
     "The cell you play in decides which small grid your opponent plays in next.",
     "Win a small grid and you immediately place one extra mark in any open small grid. "
@@ -56,7 +56,7 @@ DIFFICULTY_LABELS = {value: title for value, title, _, _ in DIFFICULTIES}
 
 MAX_WIDTH = 1152
 SIDE_WIDTH = 340
-TWO_COLUMN_MIN = 900
+TWO_COLUMN_MIN = 900  # settings + side column from this width
 GAP = 24
 CARD_GAP = 12
 
@@ -68,11 +68,11 @@ def logo_mark(title_size: int) -> int:
 
 class SetupScreen:
     def __init__(self, settings: Settings) -> None:
-        self.draft = settings
-        self.custom = {
+        self.draft = settings  # settings being edited; applied on Start
+        self.custom = {  # per mode: is a custom (non-preset) time chosen?
             mode: getattr(settings, key) not in presets for mode, (_, _, presets, _, key) in TIME_OPTIONS.items()
         }
-        self.text = {mode: str(getattr(settings, key)) for mode, (*_, key) in TIME_OPTIONS.items()}
+        self.text = {mode: str(getattr(settings, key)) for mode, (*_, key) in TIME_OPTIONS.items()}  # text typed into the custom time field
         self.input_focused = False
         self.input_rect = pygame.Rect(0, 0, 0, 0)
         self.scroll = 0
@@ -81,7 +81,7 @@ class SetupScreen:
     def with_theme(self, theme: str) -> None:
         self.draft = replace(self.draft, theme=theme)
 
-    def custom_value(self, mode: str) -> int | None:
+    def custom_value(self, mode: str) -> int | None:  # parsed custom time, or None if invalid/out of range
         _, _, _, (low, high), _ = TIME_OPTIONS[mode]
         text = self.text[mode]
         if not text.isdigit():
@@ -90,11 +90,11 @@ class SetupScreen:
         return value if low <= value <= high else None
 
     @property
-    def valid(self) -> bool:
+    def valid(self) -> bool:  # Start is enabled only when this is true
         mode = self.draft.mode
         return mode == "free" or not self.custom[mode] or self.custom_value(mode) is not None
 
-    def settings(self) -> Settings:
+    def settings(self) -> Settings:  # draft with the custom time folded in
         mode = self.draft.mode
         if mode != "free" and self.custom[mode]:
             return replace(self.draft, **{TIME_OPTIONS[mode][4]: self.custom_value(mode)})
@@ -113,7 +113,7 @@ class SetupScreen:
     def type_text(self, text: str) -> None:
         if self.input_focused and self.draft.mode in TIME_OPTIONS:
             digits = "".join(ch for ch in text if ch.isdigit())
-            self.text[self.draft.mode] = (self.text[self.draft.mode] + digits)[:3]
+            self.text[self.draft.mode] = (self.text[self.draft.mode] + digits)[:3]  # digits only, max 3 characters
 
     def backspace(self) -> None:
         if self.input_focused and self.draft.mode in TIME_OPTIONS:
@@ -127,7 +127,7 @@ class SetupScreen:
         p = ui.p
         width, height = surface.get_size()
         self.scroll_by(0, height)
-        cw = min(MAX_WIDTH, width - 64)
+        cw = min(MAX_WIDTH, width - 64)  # content width
         x = (width - cw) // 2
         y = 40 - self.scroll
 
@@ -135,7 +135,7 @@ class SetupScreen:
         y = self._title(ui, x, y, toggle.x - x - 24) + 14
         y = ui.text(INTRO, (x, y), Face.REGULAR, 18, p.muted, wrap=min(cw, 640)).bottom + 32
 
-        if cw >= TWO_COLUMN_MIN:
+        if cw >= TWO_COLUMN_MIN:  # wide: two columns; narrow: stacked
             main_w = cw - SIDE_WIDTH - GAP
             main_bottom = ui.card_section(x, y, main_w, lambda cy, w: self._settings(ui, x + 28, cy, w, now), (28, 28))
             side_bottom = self._side(ui, x + main_w + GAP, y, SIDE_WIDTH, on_start)
@@ -147,7 +147,7 @@ class SetupScreen:
         y = self._rules(ui, x, y, cw)
         self.content_height = y + self.scroll + 48
 
-        if self.content_height > height:
+        if self.content_height > height:  # draw a scrollbar thumb when the page overflows
             track = height - 16
             thumb_h = max(32, track * height // self.content_height)
             thumb_y = 8 + (track - thumb_h) * self.scroll // max(1, self.content_height - height)
@@ -155,7 +155,7 @@ class SetupScreen:
 
     def _title(self, ui: Ui, x: int, y: int, room: int) -> int:
         size = 60
-        while size > 32 and 2 * logo_mark(size) + 18 + measure("Super Tic-Tac-Toe", Face.DISPLAY, size)[0] > room:
+        while size > 32 and 2 * logo_mark(size) + 18 + measure("Super Tic-Tac-Toe", Face.DISPLAY, size)[0] > room:  # shrink the title until it fits
             size -= 4
         mark = logo_mark(size)
         title = render("Super Tic-Tac-Toe", Face.DISPLAY, size, ui.p.ink)
@@ -164,14 +164,14 @@ class SetupScreen:
         ui.blit(title, (right + 18, y + (row_h - title.get_height()) // 2))
         return y + row_h
 
-    def _settings(self, ui: Ui, x: int, y: int, width: int, now: float) -> int:
+    def _settings(self, ui: Ui, x: int, y: int, width: int, now: float) -> int:  # mode, time picker, difficulty
         y = self._cards(ui, x, y, width, "Mode", MODES, self.draft.mode, self._set_mode, icons=True) + 28
         mode = self.draft.mode
         if mode in TIME_OPTIONS:
             y = self._time_picker(ui, x, y, mode, now) + 28
         return self._cards(ui, x, y, width, "Difficulty", DIFFICULTIES, self.draft.difficulty, self._set_difficulty)
 
-    def _cards(self, ui: Ui, x: int, y: int, width: int, legend: str, options, selected: str, choose, icons: bool = False) -> int:
+    def _cards(self, ui: Ui, x: int, y: int, width: int, legend: str, options, selected: str, choose, icons: bool = False) -> int:  # row of three option cards
         y = ui.text(legend, (x, y), Face.SEMIBOLD, 16).bottom + 12
         card_w = (width - 2 * CARD_GAP) // 3
         card_h = max(option_height(title, body, card_w, icon=icons, meter=not icons) for _, title, body, _ in options)
@@ -188,7 +188,7 @@ class SetupScreen:
             )
         return y + card_h
 
-    def _time_picker(self, ui: Ui, x: int, y: int, mode: str, now: float) -> int:
+    def _time_picker(self, ui: Ui, x: int, y: int, mode: str, now: float) -> int:  # preset chips + custom number field
         p = ui.p
         legend, unit, presets, (low, high), key = TIME_OPTIONS[mode]
         legend_rect = ui.text(legend, (x, y), Face.SEMIBOLD, 16)
@@ -213,17 +213,17 @@ class SetupScreen:
         else:
             ui.rounded(self.input_rect, 10, p.card, p.rule)
         text_rect = ui.text(self.text[mode], (x + 14, y + 11), Face.REGULAR, 16)
-        if self.input_focused and int(now * 2) % 2 == 0:
+        if self.input_focused and int(now * 2) % 2 == 0:  # blinking caret
             caret_x = x + 14 + measure(self.text[mode], Face.REGULAR, 16)[0] + 1
             ui.fill(pygame.Rect(caret_x, y + 11, 2, text_rect.height), p.ink)
-        ui.region(self.input_rect, self._focus_input, "Custom value")
+        ui.region(self.input_rect, self._focus_input, "Custom value")  # click focuses the field
         ui.text(unit, (self.input_rect.right + 10, y + 11), Face.REGULAR, 16)
         y = self.input_rect.bottom
         if self.custom_value(mode) is None:
             y = ui.text(f"Enter a whole number from {low} to {high}.", (x, y + 6), Face.SEMIBOLD, 14, p.danger).bottom
         return y
 
-    def _side(self, ui: Ui, x: int, y: int, width: int, on_start: Action) -> int:
+    def _side(self, ui: Ui, x: int, y: int, width: int, on_start: Action) -> int:  # players card + credits card
         y = ui.card_section(x, y, width, lambda cy, w: self._players(ui, x + 20, cy, w, on_start), (20, 20)) + CARD_GAP
         return ui.card_section(x, y, width, lambda cy, w: self._credits(ui, x + 20, cy), (20, 20))
 
@@ -238,7 +238,7 @@ class SetupScreen:
             "Start game", (x, y + 4), on_start, enabled=self.valid, size=18, pad=(0, 17), width=width, icon="arrow"
         ).bottom
 
-    def _credits(self, ui: Ui, x: int, y: int) -> int:
+    def _credits(self, ui: Ui, x: int, y: int) -> int:  # team names
         p = ui.p
         y = ui.heading("Made by", (x, y)).bottom + 12
         for i, name in enumerate(CREDITS):
@@ -248,7 +248,7 @@ class SetupScreen:
             y = rect.bottom + 8
         return y - 8
 
-    def _rules(self, ui: Ui, x: int, y: int, cw: int) -> int:
+    def _rules(self, ui: Ui, x: int, y: int, cw: int) -> int:  # numbered rule tiles, 2-5 per row
         p = ui.p
         y = ui.text("How to play", (x, y), Face.SEMIBOLD, 16).bottom + 12
         columns = 5 if cw >= 1000 else 3 if cw >= 640 else 2
@@ -280,7 +280,7 @@ class SetupScreen:
         self.input_focused = False
         self.draft = replace(self.draft, **{TIME_OPTIONS[mode][4]: value})
 
-    def _set_custom(self, mode: str) -> None:
+    def _set_custom(self, mode: str) -> None:  # choosing Custom focuses the field
         self.custom[mode] = True
         self.input_focused = True
 

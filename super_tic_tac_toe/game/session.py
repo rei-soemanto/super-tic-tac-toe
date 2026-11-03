@@ -19,6 +19,7 @@ MAX_AI_PLACEMENTS = 2
 AI_REVEAL_S = 0.4
 
 
+# What the game is doing right now.
 class Status(StrEnum):
     SETUP = "setup"
     HUMAN_TURN = "human_turn"
@@ -27,6 +28,7 @@ class Status(StrEnum):
     GAME_OVER = "game_over"
 
 
+# Whose clock ran out.
 class Timeout(StrEnum):
     HUMAN = "human"
     AI = "ai"
@@ -85,6 +87,7 @@ class GameSession:
         return self.status == Status.HUMAN_TURN and self.state.phase == BONUS
 
     def start(self, settings: Settings, now: float) -> None:
+        """A new game: your turn, all clocks start now."""
         self._reset(settings)
         self.status = Status.HUMAN_TURN
         self.turn_starts = [0]
@@ -98,26 +101,27 @@ class GameSession:
         self.settings = replace(self.settings, **changes)
 
     def play(self, grid: int, cell: int, now: float) -> bool:
+        """Your click: rejected if not your turn, too late or illegal; otherwise placed."""
         if self.status != Status.HUMAN_TURN:
             return False
         if self.expired_clock(now):
             self.tick(now)
             return False
         if self.state.illegal_reason(grid, cell):
-            self.flash_at = now
+            self.flash_at = now # makes the board flash
             return False
 
         self.now = now
         self.state.make(grid, cell)
         if self.state.result != ONGOING:
             self._finish(self._end_from_result(), now)
-        elif self.state.to_move == HUMAN:
+        elif self.state.to_move == HUMAN: # bonus: your turn again, with a fresh placement clock
             self.placement_started_at = now
-        else:
+        else: # hand the turn to the AI
             self.status = Status.AI_THINKING
             self.request_id += 1
             self.requested = False
-            self.ai_requested_at = now
+            self.ai_requested_at = now # the AI's clock starts here
         return True
 
     def ai_request(self, now: float) -> AiRequest | None:
@@ -137,6 +141,7 @@ class GameSession:
         )
 
     def ai_outcome(self, outcome: AiOutcome, now: float) -> None:
+        """The AI's answer: ignored if stale, an error, too late (Competitive), or shown on the board."""
         if self.status != Status.AI_THINKING or outcome.request_id != self.request_id:
             return
         if outcome.turn is None:
@@ -145,6 +150,7 @@ class GameSession:
 
         turn = outcome.turn
         elapsed = now - self.ai_requested_at
+        # Competitive: each AI placement gets one placement limit
         if self.settings.mode == "competitive" and elapsed > self.placement_limit * len(turn.moves):
             self._timeout(Timeout.AI, now)
             return
@@ -163,6 +169,7 @@ class GameSession:
             self.requested = False
 
     def tick(self, now: float) -> None:
+        """Called every frame by the GUI: ends the game if a clock ran out, reveals AI moves."""
         if self.status in (Status.SETUP, Status.GAME_OVER):
             return
         self.now = now
@@ -182,6 +189,7 @@ class GameSession:
             limit = self.placement_limit
             if self.status == Status.HUMAN_TURN and now - self.placement_started_at >= limit:
                 return Timeout.HUMAN
+            # the AI never answered: allow the longest possible turn (2 placements) before it loses
             if self.status == Status.AI_THINKING and now - self.ai_requested_at >= limit * MAX_AI_PLACEMENTS:
                 return Timeout.AI
         return None
@@ -195,9 +203,9 @@ class GameSession:
         """Takes back the human's last turn (bonus included) and the AI's reply."""
         if not self.can_undo():
             return
-        if len(self.state.history) <= self.turn_starts[-1]:
+        if len(self.state.history) <= self.turn_starts[-1]: # nothing played this turn: go back one more
             self.turn_starts.pop()
-        while len(self.state.history) > self.turn_starts[-1]:
+        while len(self.state.history) > self.turn_starts[-1]: # unmake back to the start of your turn
             self.state.unmake()
         self.status = Status.HUMAN_TURN
         self.end = None
@@ -207,6 +215,7 @@ class GameSession:
         self.now = now
 
     def _reveal(self, now: float) -> None:
+        """Puts the AI's next placement on the board; when none are left, it is your turn."""
         if self.pending:
             self.state.make(*self.pending.pop(0))
             self.revealed_at = now
@@ -218,7 +227,7 @@ class GameSession:
             self._finish(self._end_from_result(), now)
             return
         self.status = Status.HUMAN_TURN
-        self.turn_starts.append(len(self.state.history))
+        self.turn_starts.append(len(self.state.history)) # where Undo will return to
         self.placement_started_at = now
 
     def _timeout(self, kind: Timeout, now: float) -> None:
@@ -227,6 +236,7 @@ class GameSession:
         elif kind == Timeout.AI:
             self._finish(GameEnd("timeout", HUMAN, kind), now)
         else:
+            # Time-based clock ran out: AI placements already received still count
             while self.pending and self.state.result == ONGOING:
                 self.state.make(*self.pending.pop(0))
             if self.state.result != ONGOING:

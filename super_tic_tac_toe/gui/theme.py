@@ -11,13 +11,13 @@ def hex_color(value: str) -> Color:
     return int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
 
 
-def mix(a: Color, b: Color, amount: float) -> Color:
+def mix(a: Color, b: Color, amount: float) -> Color:  # linear blend, used for fades and hover states
     """`amount` of b over a."""
     return tuple(round(x + (y - x) * amount) for x, y in zip(a, b))  # type: ignore[return-value]
 
 
 @dataclass(frozen=True)
-class Palette:
+class Palette:  # every color the UI uses, by role
     paper: Color  # window ground
     card: Color  # cards, board grids, dialog
     border: Color  # card edges
@@ -44,7 +44,7 @@ class Palette:
         return self.x_tint if player == X else self.o_tint
 
 
-LIGHT = Palette(
+LIGHT = Palette(  # light theme
     paper=hex_color("#f3f4f6"),
     card=hex_color("#ffffff"),
     border=hex_color("#e3e5e9"),
@@ -65,7 +65,7 @@ LIGHT = Palette(
     scrim=hex_color("#111827"),
 )
 
-DARK = Palette(
+DARK = Palette(  # dark theme
     paper=hex_color("#111318"),
     card=hex_color("#1a1d24"),
     border=hex_color("#2a2e37"),
@@ -87,5 +87,5 @@ DARK = Palette(
 )
 
 
-def palette(theme: Theme) -> Palette:
+def palette(theme: Theme) -> Palette:  # pick palette by theme name
     return DARK if theme == "dark" else LIGHT

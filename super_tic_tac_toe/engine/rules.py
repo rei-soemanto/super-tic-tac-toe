@@ -14,6 +14,7 @@ NORMAL, BONUS = 0, 1
 FULL = 0x1FF
 CENTER = 4
 
+# The 8 winning lines (3 rows, 3 columns, 2 diagonals) as 9-bit masks.
 LINES = (
     0b000000111,
     0b000111000,

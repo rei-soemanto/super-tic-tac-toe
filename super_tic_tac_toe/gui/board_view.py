@@ -5,31 +5,31 @@ from super_tic_tac_toe.engine.state import GameState, Placement
 from super_tic_tac_toe.gui import marks
 from super_tic_tac_toe.gui.theme import Palette, mix
 
-FLASH_S = 0.48
+FLASH_S = 0.48  # how long the grids blink
 FLASH_STEP_S = 0.12
-DIM_ALPHA = 110
+DIM_ALPHA = 110  # dimming over non-winning grids at game end
 
 
-def highlighted_grids(state: GameState, interactive: bool) -> set[int]:
+def highlighted_grids(state: GameState, interactive: bool) -> set[int]:  # grids the human may play in
     """Grids the human may play in: the active grid, or every open grid on a free or bonus move."""
     if not interactive:
         return set()
     if state.active_grid is not None:
         return {state.active_grid}
-    return set(CELLS_OF[FULL & ~state.closed])
+    return set(CELLS_OF[FULL & ~state.closed])  # free/bonus move: every non-closed grid
 
 
 def winning_grids(state: GameState) -> set[int]:
     """The three small grids that won the game, if it was won by a line."""
     for player in (X, O):
         for line in LINES:
-            if state.big[player] & line == line:
+            if state.big[player] & line == line:  # bitmask test: player owns all 3 grids of a line
                 return set(CELLS_OF[line])
     return set()
 
 
 def owner(state: GameState, grid: int, cell: int) -> int | None:
-    if state.bits[X][grid] >> cell & 1:
+    if state.bits[X][grid] >> cell & 1:  # bitboard lookup of who holds this cell
         return X
     if state.bits[O][grid] >> cell & 1:
         return O
@@ -41,15 +41,15 @@ class BoardView:
         self.rect = pygame.Rect(0, 0, 0, 0)
         self.grid_rects: list[pygame.Rect] = []
         self.cell_rects: list[list[pygame.Rect]] = []
-        self.placed_at: dict[Placement, float] = {}
-        self.won_at: dict[int, float] = {}
-        self._known: tuple[tuple[Placement, ...], tuple[int, ...]] | None = None
+        self.placed_at: dict[Placement, float] = {}  # when each mark appeared (drives draw-in animation)
+        self.won_at: dict[int, float] = {}  # when each grid was won
+        self._known: tuple[tuple[Placement, ...], tuple[int, ...]] | None = None  # last seen state, to diff against
 
     def layout(self, rect: pygame.Rect) -> None:
         size = rect.width
-        gap = 8 if size >= 480 else 6
+        gap = 8 if size >= 480 else 6  # tighter gaps on small boards
         grid_size = (size - 4 * gap) / 3
-        pad = grid_size * 0.07
+        pad = grid_size * 0.07  # inner padding of a small grid
         cell = (grid_size - 2 * pad) / 3
         self.rect = pygame.Rect(rect.x, rect.y, size, size)
         self.grid_rects, self.cell_rects = [], []
@@ -65,7 +65,7 @@ class BoardView:
             self.cell_rects.append(cells)
 
     def cell_at(self, pos: tuple[int, int]) -> Placement | None:
-        if not self.rect.collidepoint(pos):
+        if not self.rect.collidepoint(pos):  # pixel -> (grid, cell) hit test
             return None
         for grid, grid_rect in enumerate(self.grid_rects):
             if grid_rect.collidepoint(pos):
@@ -83,16 +83,16 @@ class BoardView:
             return
         old_placements, old_statuses = self._known
         common = 0
-        while common < min(len(placements), len(old_placements)) and placements[common] == old_placements[common]:
+        while common < min(len(placements), len(old_placements)) and placements[common] == old_placements[common]:  # find the common prefix with the previous move list
             common += 1
-        if common < len(old_placements):
+        if common < len(old_placements):  # moves shrank (undo): drop stale animations
             self.placed_at = {p: t for p, t in self.placed_at.items() if p in placements[:common]}
             self.won_at = {g: t for g, t in self.won_at.items() if statuses[g] == old_statuses[g]}
         for placement in placements[common:]:
-            self.placed_at[placement] = now
+            self.placed_at[placement] = now  # new move: start its animation
         for grid, status in enumerate(statuses):
             if status not in (OPEN, DRAW) and old_statuses[grid] != status:
-                self.won_at[grid] = now
+                self.won_at[grid] = now  # grid newly won: start its big-mark animation
         self._known = (placements, statuses)
 
     def reset_animation(self) -> None:
@@ -117,44 +117,44 @@ class BoardView:
         last_owner = owner(state, *last) if last else None
         winners = winning_grids(state)
         flashing = flash_at is not None and 0 <= now - flash_at < FLASH_S
-        flash_on = flashing and int((now - flash_at) / FLASH_STEP_S) % 2 == 0
+        flash_on = flashing and int((now - flash_at) / FLASH_STEP_S) % 2 == 0  # blink on/off every FLASH_STEP_S
         radius = max(4, round(self.grid_rects[0].width * 0.05))
 
-        surface.blit(marks.rounded(self.rect.size, round(radius * 1.6), p.frame), self.rect.topleft)
+        surface.blit(marks.rounded(self.rect.size, round(radius * 1.6), p.frame), self.rect.topleft)  # board frame behind the 9 grids
         for grid, grid_rect in enumerate(self.grid_rects):
             status = state.grid_status[grid]
-            background = p.x_wash if grid in highlighted else p.card
+            background = p.x_wash if grid in highlighted else p.card  # playable grids get a warm wash
             surface.blit(marks.rounded(grid_rect.size, radius, background), grid_rect.topleft)
             cells = self.cell_rects[grid]
             inner = cells[0].union(cells[8])
             for i in (1, 2):
-                surface.fill(p.line, (cells[i].x, inner.y, 1, inner.height))
+                surface.fill(p.line, (cells[i].x, inner.y, 1, inner.height))  # inner tic-tac-toe lines
                 surface.fill(p.line, (inner.x, cells[i * 3].y, inner.width, 1))
 
-            fade = 0.16 if status not in (OPEN, DRAW) else 0.38 if status == DRAW else 1.0
+            fade = 0.16 if status not in (OPEN, DRAW) else 0.38 if status == DRAW else 1.0  # marks in won grids fade strongly, drawn grids slightly
             for cell, cell_rect in enumerate(cells):
                 player = owner(state, grid, cell)
                 if (grid, cell) == last and last_owner is not None:
                     tint = pygame.Rect(cell_rect.x + 1, cell_rect.y + 1, cell_rect.width - 1, cell_rect.height - 1)
-                    surface.fill(p.tint(last_owner), tint)
+                    surface.fill(p.tint(last_owner), tint)  # highlight the last move
                 if player is not None:
                     color = mix(background, p.player(player), fade)
                     self._blit_mark(surface, player, cell_rect, color, now, self.placed_at.get((grid, cell)))
-                elif (grid, cell) in legal and hover == (grid, cell):
+                elif (grid, cell) in legal and hover == (grid, cell):  # faint X preview on hover
                     self._blit_mark(surface, X, cell_rect, mix(background, p.x_ink, 0.3), now, None)
 
             if status not in (OPEN, DRAW):
                 size = round(grid_rect.width * 0.88)
                 started = self.won_at.get(grid)
-                image = marks.mark(status - 1, size, p.player(status - 1), 0.07, None if started is None else now - started)
+                image = marks.mark(status - 1, size, p.player(status - 1), 0.07, None if started is None else now - started)  # big X/O over a won grid
                 surface.blit(image, image.get_rect(center=grid_rect.center))
-            if winners and grid not in winners:
+            if winners and grid not in winners:  # dim everything except the winning line
                 surface.blit(marks.rounded(grid_rect.size, radius, p.paper + (DIM_ALPHA,)), grid_rect.topleft)
             edge = None
             if grid in winners:
-                edge = (p.player(status - 1), 4)
+                edge = (p.player(status - 1), 4)  # winning grid border
             elif grid in highlighted and (flash_on or state.active_grid == grid):
-                edge = (p.x_ink, 5 if flash_on else 3)
+                edge = (p.x_ink, 5 if flash_on else 3)  # active grid border (thicker while flashing)
             if edge:
                 surface.blit(marks.rounded(grid_rect.size, radius, None, edge[0], edge[1]), grid_rect.topleft)
 

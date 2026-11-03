@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pygame
 
-FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"  # bundled Archivo fonts in assets/fonts
 
 
 class Face(StrEnum):
@@ -15,13 +15,13 @@ class Face(StrEnum):
     HEADING = "ArchivoSemiExpanded-Bold.ttf"
 
 
-@cache
+@cache  # one Font object per (face, size)
 def font(face: Face, size: int) -> pygame.font.Font:
     return pygame.font.Font(FONT_DIR / face.value, size)
 
 
 def render(text: str, face: Face, size: int, color: tuple[int, int, int], wrap: int = 0) -> pygame.Surface:
-    return font(face, size).render(text, True, color, None, wrap)
+    return font(face, size).render(text, True, color, None, wrap)  # anti-aliased; wrap=0 means no wrapping
 
 
 def measure(text: str, face: Face, size: int) -> tuple[int, int]:

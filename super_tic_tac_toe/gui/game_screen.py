@@ -13,16 +13,16 @@ from super_tic_tac_toe.gui.fonts import Face, measure, render
 from super_tic_tac_toe.gui.panel import Panel
 from super_tic_tac_toe.gui.widgets import Action, Ui
 
-MAX_WIDTH = 1152
+MAX_WIDTH = 1152  # content width cap
 PANEL_WIDTH = 420
 PANEL_GAP = 56
-WIDE_MIN = 1040
-TOP = 76
-SLOT_HEIGHT = 56
+WIDE_MIN = 1040  # side-by-side layout from this width
+TOP = 76  # space for the header row
+SLOT_HEIGHT = 56  # banner/hint area above the board
 BONUS_TEXT = "Bonus move! Place anywhere open."
 
 
-def board_hint(session: GameSession) -> str:
+def board_hint(session: GameSession) -> str:  # explains why those grids are highlighted
     """The line above the board on a normal human turn: why the highlighted grids are open."""
     if session.status != Status.HUMAN_TURN or session.in_bonus:
         return ""
@@ -37,7 +37,7 @@ def board_hint(session: GameSession) -> str:
 
 
 @dataclass
-class GameActions:
+class GameActions:  # button callbacks supplied by App
     new_game: Action
     undo: Action
     change_settings: Action
@@ -50,9 +50,9 @@ class GameScreen:
     def __init__(self) -> None:
         self.board = BoardView()
         self.panel = Panel()
-        self.scroll = 0
+        self.scroll = 0  # vertical page scroll for small windows
         self.content_height = 0
-        self.dismissed: GameEnd | None = None
+        self.dismissed: GameEnd | None = None  # end state whose dialog was closed via View board
 
     def reset(self) -> None:
         self.board.reset_animation()
@@ -60,7 +60,7 @@ class GameScreen:
         self.scroll = 0
         self.dismissed = None
 
-    def dialog_open(self, session: GameSession) -> bool:
+    def dialog_open(self, session: GameSession) -> bool:  # game-over dialog visible?
         return session.status == Status.GAME_OVER and session.end is not None and session.end is not self.dismissed
 
     def dismiss_dialog(self, session: GameSession) -> None:
@@ -69,7 +69,7 @@ class GameScreen:
     def scroll_by(self, pixels: int, view_height: int) -> None:
         self.scroll = max(0, min(self.scroll + pixels, max(0, self.content_height - view_height)))
 
-    def hover_cell(self, session: GameSession, mouse: tuple[int, int]) -> Placement | None:
+    def hover_cell(self, session: GameSession, mouse: tuple[int, int]) -> Placement | None:  # no hover when it's not the human's turn
         if session.status != Status.HUMAN_TURN or self.dialog_open(session):
             return None
         return self.board.cell_at(mouse)
@@ -78,7 +78,7 @@ class GameScreen:
         surface = ui.surface
         p = ui.p
         width, height = surface.get_size()
-        self.scroll_by(0, height)
+        self.scroll_by(0, height)  # re-clamp scroll after a resize
         pad = 32 if width >= 900 else 24
         cw = min(MAX_WIDTH, width - 2 * pad)
         x0 = (width - cw) // 2
@@ -88,7 +88,7 @@ class GameScreen:
         ui.text("Super Tic-Tac-Toe", (logo_right + 12, 24 - self.scroll), Face.DISPLAY, 22)
         ui.toggle("Dark theme", (x0 + cw, 26 - self.scroll), theme_dark, actions.toggle_theme)
 
-        wide = width >= WIDE_MIN
+        wide = width >= WIDE_MIN  # wide: panel beside board; narrow: panel below
         board_top = top + SLOT_HEIGHT + 8
         if wide:
             column = cw - PANEL_WIDTH - PANEL_GAP
@@ -100,9 +100,9 @@ class GameScreen:
             board_x = x0 + (cw - size) // 2
             panel_x, panel_y, panel_w = board_x, board_top + size + 32, size
 
-        self._slot(ui, session, board_x, top, size, actions.retry)
-        self.board.layout(pygame.Rect(board_x, board_top, size, size))
-        self.board.track(session.state, now)
+        self._slot(ui, session, board_x, top, size, actions.retry)  # error / bonus / hint line
+        self.board.layout(pygame.Rect(board_x, board_top, size, size))  # compute grid and cell rects
+        self.board.track(session.state, now)  # detect new moves for animations
         self.board.draw(
             surface,
             p,
@@ -117,9 +117,9 @@ class GameScreen:
             ui, panel_x, panel_y, panel_w, session, actions.new_game, actions.undo, actions.change_settings
         )
         bottom = max(board_top + size, panel_y + panel_h) + 32
-        self.content_height = bottom + self.scroll
+        self.content_height = bottom + self.scroll  # total height, for scroll limits
 
-        if self.dialog_open(session):
+        if self.dialog_open(session):  # game-over dialog drawn last, on top
             draw_game_over(
                 ui,
                 session.end,
@@ -135,9 +135,9 @@ class GameScreen:
     def _slot(ui: Ui, session: GameSession, x: int, y: int, width: int, retry: Action) -> None:
         """The space above the board: an AI error, the bonus banner, or a hint about where to play."""
         p = ui.p
-        if session.error:
+        if session.error:  # AI failure: show retry banner
             ui.banner(session.error, x, y, width, "Retry", retry)
-        elif session.in_bonus:
+        elif session.in_bonus:  # bonus move banner
             rect = pygame.Rect(x, y + 6, width, SLOT_HEIGHT - 12)
             ui.rounded(rect, 10, p.x_ink)
             text = render(BONUS_TEXT, Face.SEMIBOLD, 16, p.on_ink)

@@ -15,7 +15,7 @@ from super_tic_tac_toe.gui import marks
 from super_tic_tac_toe.gui.fonts import Face, measure, render
 from super_tic_tac_toe.gui.theme import LIGHT, Color, Palette, mix
 
-Action = Callable[[], None]
+Action = Callable[[], None]  # button callback with no args
 
 CARD_RADIUS = 14
 CONTROL_RADIUS = 10
@@ -25,19 +25,19 @@ METER_SEGMENTS = 6
 
 
 @dataclass
-class Region:
+class Region:  # clickable rect + action + label
     rect: pygame.Rect
     action: Action
     label: str
 
 
-class Ui:
+class Ui:  # per-frame draw helper and click router
     def __init__(self) -> None:
         self.surface: pygame.Surface | None = None
         self.colors: Palette | None = None
         self.mouse = (-1, -1)
-        self.regions: list[Region] = []
-        self.modal_from: int | None = None
+        self.regions: list[Region] = []  # rebuilt every frame
+        self.modal_from: int | None = None  # index of first region above the modal layer
         self._modal_pending = False
         self._scratch = pygame.Surface((1, 1), pygame.SRCALPHA)
 
@@ -49,7 +49,7 @@ class Ui:
         self.modal_from = None
         self._modal_pending = modal
 
-    def begin_modal(self) -> None:
+    def begin_modal(self) -> None:  # regions before this index stop receiving input
         self.modal_from = len(self.regions)
         self._modal_pending = False
 
@@ -59,7 +59,7 @@ class Ui:
         return self.colors
 
     @contextmanager
-    def dry_run(self) -> Iterator[None]:
+    def dry_run(self) -> Iterator[None]:  # measure layout without drawing or registering clicks
         """Lays widgets out without drawing them or registering their regions."""
         surface, count = self.surface, len(self.regions)
         self.surface = self._scratch
@@ -70,7 +70,7 @@ class Ui:
             del self.regions[count:]
 
     def hovered(self, rect: pygame.Rect) -> bool:
-        return not self._modal_pending and rect.collidepoint(self.mouse)
+        return not self._modal_pending and rect.collidepoint(self.mouse)  # no hover effects under a modal
 
     def region(self, rect: pygame.Rect, action: Action, label: str = "") -> None:
         self.regions.append(Region(pygame.Rect(rect), action, label))
@@ -79,7 +79,7 @@ class Ui:
         return self.regions if self.modal_from is None else self.regions[self.modal_from :]
 
     def click(self, pos: tuple[int, int]) -> bool:
-        for region in reversed(self.active_regions()):
+        for region in reversed(self.active_regions()):  # topmost (last drawn) region wins
             if region.rect.collidepoint(pos):
                 region.action()
                 return True
@@ -88,7 +88,7 @@ class Ui:
     def over_clickable(self, pos: tuple[int, int]) -> bool:
         return any(region.rect.collidepoint(pos) for region in self.active_regions())
 
-    def find(self, label: str) -> pygame.Rect | None:
+    def find(self, label: str) -> pygame.Rect | None:  # look up a region's rect by label
         return next((r.rect for r in self.active_regions() if r.label == label), None)
 
     def blit(self, image: pygame.Surface, pos: tuple[int, int]) -> pygame.Rect:
@@ -123,7 +123,7 @@ class Ui:
     def card(self, rect: pygame.Rect, radius: int = CARD_RADIUS) -> None:
         self.rounded(rect, radius, self.p.card, self.p.border)
 
-    def card_section(
+    def card_section(  # two-pass: measure with dry_run, then draw the card and content
         self, x: int, y: int, width: int, content: Callable[[int, int], int], pad: tuple[int, int] = (18, 16)
     ) -> int:
         """A card sized to fit `content(y, inner_width)`, which draws from `y` and returns its bottom."""
@@ -133,7 +133,7 @@ class Ui:
         content(y + pad[1], width - 2 * pad[0])
         return bottom + pad[1]
 
-    def logo(self, pos: tuple[int, int], size: int) -> int:
+    def logo(self, pos: tuple[int, int], size: int) -> int:  # X+O logo
         """The X and O pair, each `size` pixels square; returns its right edge."""
         p = self.p
         self.blit(marks.mark(X, size, p.x_ink, 0.14), pos)
@@ -144,7 +144,7 @@ class Ui:
         """A small uppercase section label."""
         return self.text(text.upper(), pos, Face.SEMIBOLD, 12, self.p.muted)
 
-    def button(
+    def button(  # primary = filled, else outlined; disabled registers no region
         self,
         label: str,
         pos: tuple[int, int],
@@ -180,7 +180,7 @@ class Ui:
             self.region(rect, action, label)
         return rect
 
-    def link(self, label: str, pos: tuple[int, int], action: Action, size: int = 14) -> pygame.Rect:
+    def link(self, label: str, pos: tuple[int, int], action: Action, size: int = 14) -> pygame.Rect:  # underlined text button
         tw, th = measure(label, Face.REGULAR, size)
         rect = pygame.Rect(pos, (tw, th + 4))
         color = self.p.ink if self.hovered(rect) else self.p.o_ink
@@ -189,7 +189,7 @@ class Ui:
         self.region(rect, action, label)
         return rect
 
-    def option(
+    def option(  # selectable card with icon, title, meter, body
         self,
         rect: pygame.Rect,
         title: str,
@@ -222,7 +222,7 @@ class Ui:
             self.text(body, (x, y), Face.REGULAR, 14, p.muted, rect.width - 2 * pad)
         self.region(rect, action, title)
 
-    def chip(self, label: str, pos: tuple[int, int], selected: bool, action: Action) -> pygame.Rect:
+    def chip(self, label: str, pos: tuple[int, int], selected: bool, action: Action) -> pygame.Rect:  # pill-shaped choice
         face = Face.SEMIBOLD if selected else Face.REGULAR
         tw, th = measure(label, face, 15)
         rect = pygame.Rect(pos, (tw + 40, th + 20))
@@ -236,7 +236,7 @@ class Ui:
         self.region(rect, action, label)
         return rect
 
-    def toggle(self, label: str, pos: tuple[int, int], on: bool, action: Action) -> pygame.Rect:
+    def toggle(self, label: str, pos: tuple[int, int], on: bool, action: Action) -> pygame.Rect:  # on/off switch
         """A switch with its label on the left; `pos` is the top-right corner."""
         p = self.p
         tw, th = measure(label, Face.REGULAR, 14)
@@ -253,7 +253,7 @@ class Ui:
         self.region(rect, action, label)
         return rect
 
-    def banner(self, message: str, rect_x: int, y: int, width: int, action_label: str | None, action: Action | None) -> int:
+    def banner(self, message: str, rect_x: int, y: int, width: int, action_label: str | None, action: Action | None) -> int:  # error strip with optional action button
         p = self.p
         image = render(message, Face.SEMIBOLD, 15, p.ink, width - 160)
         height = max(image.get_height() + 24, 56)
@@ -266,7 +266,7 @@ class Ui:
         return height
 
 
-def option_height(title: str, body: str, width: int, icon: bool = False, meter: bool = False) -> int:
+def option_height(title: str, body: str, width: int, icon: bool = False, meter: bool = False) -> int:  # pre-compute card height so a row can share one height
     pad = OPTION_PAD
     height = pad * 2 + measure(title, Face.BOLD, 16)[1] + 8
     if icon:

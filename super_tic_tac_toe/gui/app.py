@@ -17,8 +17,8 @@ from super_tic_tac_toe.gui.widgets import Ui
 TITLE = "Super Tic-Tac-Toe"
 DEFAULT_SIZE = (1280, 820)
 MIN_SIZE = (720, 640)
-FPS = 60
-WHEEL_STEP = 48
+FPS = 60  # frame cap
+WHEEL_STEP = 48  # pixels scrolled per wheel notch
 
 
 class App:
@@ -26,12 +26,12 @@ class App:
         pygame.init()
         self.settings_path = settings_path
         settings = settings_store.load(settings_path)
-        self.session = GameSession(settings)
+        self.session = GameSession(settings)  # all game logic lives in the session; the GUI only reads/drives it
         self.runner = runner
-        self.ui = Ui()
+        self.ui = Ui()  # immediate-mode widget layer shared by both screens
         self.setup = SetupScreen(settings)
         self.game = GameScreen()
-        self.window = pygame.Window(TITLE, size, resizable=True)
+        self.window = pygame.Window(TITLE, size, resizable=True)  # pygame-ce window API (resizable)
         self.window.minimum_size = MIN_SIZE
         self.window.set_icon(self._icon())
         self.running = True
@@ -39,8 +39,8 @@ class App:
         self.mouse = (-1, -1)
         self._cursor = pygame.SYSTEM_CURSOR_ARROW
         self._text_input = False
-        pygame.key.stop_text_input()
-        self.actions = GameActions(
+        pygame.key.stop_text_input()  # text input stays off until a text field is focused
+        self.actions = GameActions(  # callbacks handed to the game screen's buttons
             new_game=self.new_game,
             undo=lambda: self.session.undo(self.now),
             change_settings=self.change_settings,
@@ -50,18 +50,18 @@ class App:
         )
 
     @property
-    def on_setup(self) -> bool:
+    def on_setup(self) -> bool:  # true while the settings screen is showing
         return self.session.status == Status.SETUP
 
     @property
-    def theme(self) -> str:
+    def theme(self) -> str:  # draft theme on setup, saved theme in game
         return self.setup.draft.theme if self.on_setup else self.session.settings.theme
 
     def start(self) -> None:
         if not self.setup.valid:
             return
         settings = self.setup.settings()
-        settings_store.save(settings, self.settings_path)
+        settings_store.save(settings, self.settings_path)  # persist chosen settings
         self.game.reset()
         self.session.start(settings, self.now)
 
@@ -82,7 +82,7 @@ class App:
     def play(self, placement: Placement) -> None:
         self.session.play(*placement, self.now)
 
-    def handle_event(self, event: pygame.event.Event, now: float) -> None:
+    def handle_event(self, event: pygame.event.Event, now: float) -> None:  # route one pygame event
         self.now = now
         if event.type in (pygame.QUIT, pygame.WINDOWCLOSE):
             self.running = False
@@ -100,19 +100,19 @@ class App:
 
     def update(self, now: float) -> None:
         self.now = now
-        self.session.tick(now)
-        for outcome in self.runner.poll():
+        self.session.tick(now)  # advance clocks/animations
+        for outcome in self.runner.poll():  # collect finished AI searches
             self.session.ai_outcome(outcome, now)
-        request = self.session.ai_request(now)
+        request = self.session.ai_request(now)  # ask the session whether the AI needs to move
         if request:
-            self.runner.submit(request)
+            self.runner.submit(request)  # start the search in the background process
 
     def render(self, now: float) -> None:
         surface = self.window.get_surface()
         colors = palette(self.theme)
-        surface.fill(colors.paper)
-        modal = not self.on_setup and self.game.dialog_open(self.session)
-        self.ui.begin_frame(surface, colors, self.mouse, modal)
+        surface.fill(colors.paper)  # clear the frame
+        modal = not self.on_setup and self.game.dialog_open(self.session)  # game-over dialog blocks clicks below it
+        self.ui.begin_frame(surface, colors, self.mouse, modal)  # reset clickable regions for this frame
         if self.on_setup:
             self.setup.draw(self.ui, now, self.start, self.toggle_theme)
             wants_text = self.setup.input_focused
@@ -121,31 +121,31 @@ class App:
             wants_text = False
         if wants_text != self._text_input:
             self._text_input = wants_text
-            (pygame.key.start_text_input if wants_text else pygame.key.stop_text_input)()
+            (pygame.key.start_text_input if wants_text else pygame.key.stop_text_input)()  # toggle text events with field focus
         self._update_cursor()
 
     def run(self) -> None:
         clock = pygame.time.Clock()
         try:
             while self.running:
-                now = perf_counter()
+                now = perf_counter()  # one timestamp per frame
                 for event in pygame.event.get():
                     self.handle_event(event, now)
                 self.update(now)
                 self.render(now)
                 self.window.flip()
-                clock.tick(FPS)
+                clock.tick(FPS)  # limit to FPS
         finally:
-            self.runner.close()
+            self.runner.close()  # always stop the AI process on exit
             pygame.quit()
 
     def _click(self, pos: tuple[int, int]) -> None:
         if self.on_setup:
             self.setup.input_focused = False
-        if self.ui.click(pos) or self.on_setup:
+        if self.ui.click(pos) or self.on_setup:  # a widget consumed the click; setup has no board
             return
         if not self.game.dialog_open(self.session):
-            cell = self.game.board.cell_at(pos)
+            cell = self.game.board.cell_at(pos)  # otherwise treat it as a board click
             if cell:
                 self.play(cell)
 
@@ -153,7 +153,7 @@ class App:
         height = self.window.size[1]
         if self.on_setup:
             self.setup.scroll_by(-rows * WHEEL_STEP, height)
-        elif self.game.panel.history_rect.collidepoint(self.mouse):
+        elif self.game.panel.history_rect.collidepoint(self.mouse):  # wheel over the move list scrolls the list
             self.game.panel.scroll_history(-rows)
         else:
             self.game.scroll_by(-rows * WHEEL_STEP, height)
@@ -172,7 +172,7 @@ class App:
             elif key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 self.new_game()
 
-    def _update_cursor(self) -> None:
+    def _update_cursor(self) -> None:  # I-beam over text field, hand over clickables
         if self.on_setup and self.setup.input_rect.collidepoint(self.mouse):
             cursor = pygame.SYSTEM_CURSOR_IBEAM
         elif self.ui.over_clickable(self.mouse) or self.game.hover_cell(self.session, self.mouse):
@@ -187,7 +187,7 @@ class App:
                 pass
 
     @staticmethod
-    def _icon() -> pygame.Surface:
+    def _icon() -> pygame.Surface:  # window icon: rounded card with an X
         icon = pygame.Surface((64, 64), pygame.SRCALPHA)
         icon.blit(marks.rounded((64, 64), 14, LIGHT.card), (0, 0))
         icon.blit(marks.mark(X, 64, LIGHT.x_ink, 0.12), (0, 0))
@@ -196,5 +196,5 @@ class App:
 
 def main() -> None:
     runner = ProcessAiRunner()
-    runner.warm_up()
+    runner.warm_up()  # pre-start the AI process so the first move isn't slow
     App(runner).run()

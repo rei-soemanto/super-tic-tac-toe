@@ -17,6 +17,8 @@ from super_tic_tac_toe.engine.rules import (
 
 Placement = tuple[int, int]
 
+# Zobrist keys: one random 64-bit number per mark, active grid, bonus phase and side to move.
+# A position's key is the XOR of the keys that apply, so any move order gives the same key.
 _rng = random.Random(20261014)
 CELL_KEYS = [[_rng.getrandbits(64) for _ in range(81)] for _ in range(2)]
 ACTIVE_KEYS = [_rng.getrandbits(64) for _ in range(10)]
@@ -54,7 +56,7 @@ class GameState:
     )
 
     def __init__(self, bonus_rule: bool = True) -> None:
-        self.bits = [[0] * 9, [0] * 9]
+        self.bits = [[0] * 9, [0] * 9] # bitboards: one 9-bit integer per small grid per player
         self.grid_status = [OPEN] * 9
         self.big = [0, 0]
         self.closed = 0
@@ -63,26 +65,26 @@ class GameState:
         self.phase = NORMAL
         self.result = ONGOING
         self.history: list[tuple] = []
-        self.hash = ACTIVE_KEYS[FREE]
+        self.hash = ACTIVE_KEYS[FREE] # Zobrist key of the current position
         self.bonus_rule = bonus_rule
 
     def make(self, grid: int, cell: int) -> None:
         player = self.to_move
         active = self.active_grid
         phase = self.phase
-        self.history.append((grid, cell, active, player, phase, self.result, self.hash))
+        self.history.append((grid, cell, active, player, phase, self.result, self.hash)) # for unmake
 
         own = self.bits[player]
-        own[grid] |= 1 << cell
-        h = self.hash ^ CELL_KEYS[player][grid * 9 + cell]
-        h ^= ACTIVE_KEYS[FREE if active is None else active]
+        own[grid] |= 1 << cell # bitboard: set the cell's bit
+        h = self.hash ^ CELL_KEYS[player][grid * 9 + cell] # Zobrist: XOR in the new mark
+        h ^= ACTIVE_KEYS[FREE if active is None else active] # XOR out the old turn info
         if phase == BONUS:
             h ^= BONUS_KEY
         if player == O:
             h ^= SIDE_KEY
 
         won_grid = False
-        if IS_LINE[own[grid]]:
+        if IS_LINE[own[grid]]: # one table lookup tells whether the grid now has three in a row
             won_grid = True
             self.grid_status[grid] = won_by(player)
             self.big[player] |= 1 << grid
@@ -107,7 +109,7 @@ class GameState:
             self.to_move = 1 - player
             self.active_grid = None if self.closed >> cell & 1 else cell
 
-        h ^= ACTIVE_KEYS[FREE if self.active_grid is None else self.active_grid]
+        h ^= ACTIVE_KEYS[FREE if self.active_grid is None else self.active_grid] # XOR in the new turn info
         if self.phase == BONUS:
             h ^= BONUS_KEY
         if self.to_move == O:
@@ -115,6 +117,7 @@ class GameState:
         self.hash = h
 
     def unmake(self) -> None:
+        """Undoes the last placement in place, restoring every field including the hash."""
         grid, cell, active, player, phase, result, h = self.history.pop()
         self.bits[player][grid] &= ~(1 << cell)
         status = self.grid_status[grid]
@@ -138,6 +141,7 @@ class GameState:
         return CELLS_OF[FULL & ~self.closed]
 
     def legal_moves(self) -> list[Placement]:
+        """Empty cells of the active grid, or of every open grid on a free move."""
         if self.result != ONGOING:
             return []
         return [(g, c) for g in self.open_grids() for c in CELLS_OF[self.empty_cells(g)]]

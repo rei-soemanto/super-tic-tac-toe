@@ -13,10 +13,10 @@ MODES: tuple[Mode, ...] = ("competitive", "time_based", "free")
 DIFFICULTIES: tuple[Difficulty, ...] = ("easy", "medium", "hard")
 THEMES: tuple[Theme, ...] = ("light", "dark")
 
-COMPETITIVE_PRESETS = (5, 10, 15, 30)
-COMPETITIVE_RANGE = (3, 120)
-TIME_BASED_PRESETS = (3, 5, 10, 15)
-TIME_BASED_RANGE = (1, 60)
+COMPETITIVE_PRESETS = (5, 10, 15, 30)  # seconds per placement
+COMPETITIVE_RANGE = (3, 120)  # allowed custom value
+TIME_BASED_PRESETS = (3, 5, 10, 15)  # minutes per game
+TIME_BASED_RANGE = (1, 60)  # allowed custom value
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,7 @@ class Settings:
 
 DEFAULTS = Settings()
 
+# One check per field, used when loading so a bad saved value cannot break the game.
 _VALID = {
     "mode": lambda v: v in MODES,
     "competitive_seconds": lambda v: type(v) is int and COMPETITIVE_RANGE[0] <= v <= COMPETITIVE_RANGE[1],
@@ -53,7 +54,7 @@ def load(path: Path | None = None) -> Settings:
     """Saved settings; any missing or invalid field falls back to its default."""
     try:
         data = json.loads((path or settings_path()).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError): # no file yet, or not valid JSON
         return DEFAULTS
     if not isinstance(data, dict):
         return DEFAULTS
@@ -65,6 +66,7 @@ def load(path: Path | None = None) -> Settings:
 
 
 def save(settings: Settings, path: Path | None = None) -> None:
+    """Writes the settings as JSON; if the file cannot be written the game carries on."""
     target = path or settings_path()
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
